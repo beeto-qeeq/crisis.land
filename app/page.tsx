@@ -8,15 +8,18 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 
 export interface ConflictoVivo {
   id: string;
-  tipo: string;
-  coordenadas: [number, number];
-  nivelPeligro: number;
+  title: string;
+  description: string;
+  latitude: number;
+  longitude: number;
+  source: string;
+  created_at: string;
 }
 
 const VISTA_INICIAL = {
-  longitude: -102.5528,
-  latitude: 23.6345,
-  zoom: 2.5,
+  longitude: -103.3496,
+  latitude: 20.6596,
+  zoom: 8,
   pitch: 30,
   bearing: 0
 };
@@ -29,8 +32,7 @@ function DeckGLOverlay(props: any) {
   return null;
 }
 
-// Extraemos la capa de animación para que no re-renderice todo el mapa 30 veces por segundo
-const AnimatedPulseLayer = memo(({ conflicto }: { conflicto: ConflictoVivo }) => {
+const AnimatedPulseLayer = memo(({ conflictos }: { conflictos: ConflictoVivo[] }) => {
   const [fasePulso, setFasePulso] = useState(0);
 
   useEffect(() => {
@@ -42,81 +44,102 @@ const AnimatedPulseLayer = memo(({ conflicto }: { conflicto: ConflictoVivo }) =>
 
   const capas = [
     new ScatterplotLayer<ConflictoVivo>({
-      id: 'capa-conflicto-pulso',
-      data: [conflicto],
+      id: 'capa-conflictos-pulso',
+      data: conflictos,
       pickable: true,
       stroked: true,
       filled: true,
       lineWidthMinPixels: 2,
-      getPosition: (d) => d.coordenadas,
-      getRadius: (d) => 5000 + (fasePulso * 300),
+      getPosition: (d) => [d.longitude, d.latitude],
+      getRadius: (d) => 500 + (fasePulso * 30),
       getFillColor: [255, 0, 0, 150 - (fasePulso * 1.5)],
       getLineColor: [255, 0, 0, 255 - fasePulso],
       updateTriggers: {
         getRadius: [fasePulso],
         getFillColor: [fasePulso],
         getLineColor: [fasePulso],
-        getPosition: [conflicto]
+        getPosition: [conflictos]
       }
     }),
     new ScatterplotLayer<ConflictoVivo>({
-      id: 'capa-conflicto-centro',
-      data: [conflicto],
+      id: 'capa-conflictos-centro',
+      data: conflictos,
       filled: true,
-      getPosition: (d) => d.coordenadas,
-      getRadius: 2000,
+      getPosition: (d) => [d.longitude, d.latitude],
+      getRadius: 200,
       getFillColor: [255, 255, 255, 255],
-      updateTriggers: { getPosition: [conflicto] }
+      updateTriggers: { getPosition: [conflictos] }
     })
   ];
 
-  // Interleaved true para que respete la curvatura del globo
   return <DeckGLOverlay layers={capas} interleaved={true} />;
 });
 AnimatedPulseLayer.displayName = 'AnimatedPulseLayer';
 
 export default function Home() {
-  const [conflicto, setConflicto] = useState<ConflictoVivo>({
-    id: 'conflicto-001',
-    tipo: 'Enfrentamiento Armado',
-    coordenadas: [-102.5528, 23.6345],
-    nivelPeligro: 100
-  });
+  const [conflictos, setConflictos] = useState<ConflictoVivo[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const intervaloDatos = setInterval(() => {
-      setConflicto((actual) => {
-        const latOffset = (Math.random() - 0.5) * 0.1;
-        const lngOffset = (Math.random() - 0.5) * 0.1;
-
-        return {
-          ...actual,
-          coordenadas: [actual.coordenadas[0] + lngOffset, actual.coordenadas[1] + latOffset],
-        };
+    fetch('/api/events')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          setConflictos(data.data);
+        }
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error("Error fetching events:", err);
+        setLoading(false);
       });
-    }, 3000);
-
-    return () => clearInterval(intervaloDatos);
   }, []);
 
   return (
-    <main className="h-screen w-full bg-slate-950 overflow-hidden relative">
-      <div className="absolute top-5 left-5 z-10 pointer-events-none">
-        <h1 className="text-white text-3xl font-bold mb-2" style={{ textShadow: '0 0 10px #38bdf8' }}>
+    <main className="h-screen w-full bg-slate-950 overflow-hidden relative font-sans text-white">
+
+      <div className="absolute top-5 left-5 z-10 pointer-events-none flex flex-col gap-4 max-h-[90vh] overflow-y-auto w-80">
+        <h1 className="text-white text-3xl font-bold mb-2 ml-1" style={{ textShadow: '0 0 10px #38bdf8' }}>
           MONITOR DE CRISIS
         </h1>
 
-        <div className="bg-slate-900/80 border border-red-500/50 p-4 rounded-lg backdrop-blur-md inline-block">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
-            <span className="text-red-400 font-bold uppercase tracking-wider text-sm">Alerta Activa</span>
+        {loading ? (
+          <div className="bg-slate-900/80 border border-slate-500/50 p-4 rounded-lg backdrop-blur-md inline-block">
+            <span className="text-slate-400 font-bold tracking-wider text-sm">Cargando base de datos satelital...</span>
           </div>
-          <h2 className="text-white text-lg font-semibold">{conflicto.tipo}</h2>
-          <p className="text-slate-400 font-mono text-sm mt-1">
-            LAT: {conflicto.coordenadas[1].toFixed(4)} | LNG: {conflicto.coordenadas[0].toFixed(4)}
-          </p>
-          <p className="text-xs text-slate-500 mt-2 italic">Actualizando telemetría...</p>
-        </div>
+        ) : conflictos.length === 0 ? (
+          <div className="bg-slate-900/80 border border-green-500/50 p-4 rounded-lg backdrop-blur-md inline-block">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+              <span className="text-green-400 font-bold uppercase tracking-wider text-sm">ZONA SEGURA</span>
+            </div>
+            <p className="text-slate-400 text-sm">No hay incidentes reportados.</p>
+          </div>
+        ) : (
+          conflictos.map(conflicto => (
+            <div key={conflicto.id} className="bg-slate-900/80 border border-red-500/50 p-4 rounded-lg backdrop-blur-md inline-block relative pointer-events-auto">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
+                <span className="text-red-400 font-bold uppercase tracking-wider text-sm">Alerta Activa</span>
+                <span className="ml-auto text-[10px] bg-red-600/20 text-red-500 px-2 py-0.5 rounded-full border border-red-500/30">
+                  {conflicto.source}
+                </span>
+              </div>
+              <h2 className="text-white text-lg font-semibold leading-tight">{conflicto.title}</h2>
+              {conflicto.description && (
+                <p className="text-slate-300 text-sm mt-1 mb-2 leading-snug">{conflicto.description}</p>
+              )}
+              <div className="flex flex-col gap-1 mt-2 bg-black/30 p-2 rounded">
+                <p className="text-slate-400 font-mono text-[11px]">
+                  LAT: {conflicto.latitude.toFixed(4)} | LNG: {conflicto.longitude.toFixed(4)}
+                </p>
+                <p className="text-slate-500 font-mono text-[10px] italic">
+                  ⌚ {new Date(conflicto.created_at).toLocaleString()}
+                </p>
+              </div>
+            </div>
+          ))
+        )}
       </div>
 
       <Map
@@ -126,7 +149,7 @@ export default function Home() {
         projection={{ type: 'globe' }}
         style={{ width: '100%', height: '100%' }}
       >
-        <AnimatedPulseLayer conflicto={conflicto} />
+        <AnimatedPulseLayer conflictos={conflictos} />
       </Map>
     </main>
   );
