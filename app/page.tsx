@@ -1,9 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
-// IMPORTANTE: Agregamos useControl
+import React, { useState, useEffect, memo } from 'react';
 import Map, { useControl } from 'react-map-gl/maplibre';
-// IMPORTANTE: Agregamos el puente de inyección
 import { MapboxOverlay } from '@deck.gl/mapbox';
 import { ScatterplotLayer } from '@deck.gl/layers';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -18,51 +16,28 @@ export interface ConflictoVivo {
 const VISTA_INICIAL = {
   longitude: -102.5528,
   latitude: 23.6345,
-  zoom: 2.5, // Nos alejamos para que se vea claramente la forma del planeta
-  pitch: 30, // Un poco de inclinación 3D
+  zoom: 2.5,
+  pitch: 30,
   bearing: 0
 };
 
 const ESTILO_MAPA_OSCURO = "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json";
 
-// Este es el componente puente que inyecta los datos en el globo
 function DeckGLOverlay(props: any) {
   const overlay = useControl<MapboxOverlay>(() => new MapboxOverlay(props));
   overlay.setProps(props);
   return null;
 }
 
-export default function Home() {
-  const [conflicto, setConflicto] = useState<ConflictoVivo>({
-    id: 'conflicto-001',
-    tipo: 'Enfrentamiento Armado',
-    coordenadas: [-102.5528, 23.6345],
-    nivelPeligro: 100
-  });
-
+// Extraemos la capa de animación para que no re-renderice todo el mapa 30 veces por segundo
+const AnimatedPulseLayer = memo(({ conflicto }: { conflicto: ConflictoVivo }) => {
   const [fasePulso, setFasePulso] = useState(0);
 
   useEffect(() => {
-    const intervaloDatos = setInterval(() => {
-      setConflicto((actual) => {
-        const latOffset = (Math.random() - 0.5) * 0.1;
-        const lngOffset = (Math.random() - 0.5) * 0.1;
-
-        return {
-          ...actual,
-          coordenadas: [actual.coordenadas[0] + lngOffset, actual.coordenadas[1] + latOffset],
-        };
-      });
-    }, 3000);
-
     const intervaloAnimacion = setInterval(() => {
       setFasePulso((faseActual) => (faseActual + 2) % 100);
     }, 30);
-
-    return () => {
-      clearInterval(intervaloDatos);
-      clearInterval(intervaloAnimacion);
-    };
+    return () => clearInterval(intervaloAnimacion);
   }, []);
 
   const capas = [
@@ -95,9 +70,37 @@ export default function Home() {
     })
   ];
 
+  // Interleaved false para mayor compatibilidad con maplibre
+  return <DeckGLOverlay layers={capas} interleaved={false} />;
+});
+AnimatedPulseLayer.displayName = 'AnimatedPulseLayer';
+
+export default function Home() {
+  const [conflicto, setConflicto] = useState<ConflictoVivo>({
+    id: 'conflicto-001',
+    tipo: 'Enfrentamiento Armado',
+    coordenadas: [-102.5528, 23.6345],
+    nivelPeligro: 100
+  });
+
+  useEffect(() => {
+    const intervaloDatos = setInterval(() => {
+      setConflicto((actual) => {
+        const latOffset = (Math.random() - 0.5) * 0.1;
+        const lngOffset = (Math.random() - 0.5) * 0.1;
+
+        return {
+          ...actual,
+          coordenadas: [actual.coordenadas[0] + lngOffset, actual.coordenadas[1] + latOffset],
+        };
+      });
+    }, 3000);
+
+    return () => clearInterval(intervaloDatos);
+  }, []);
+
   return (
     <main className="h-screen w-full bg-slate-950 overflow-hidden relative">
-
       <div className="absolute top-5 left-5 z-10 pointer-events-none">
         <h1 className="text-white text-3xl font-bold mb-2" style={{ textShadow: '0 0 10px #38bdf8' }}>
           MONITOR DE CRISIS
@@ -116,16 +119,12 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Ahora el Mapa principal es el que manda y contiene al globo */}
       <Map
         initialViewState={VISTA_INICIAL}
         mapStyle={ESTILO_MAPA_OSCURO}
-        // @ts-ignore: Forzamos la proyección de globo en MapLibre
-        projection={{ type: 'globe' }}
         style={{ width: '100%', height: '100%' }}
       >
-        {/* Y Deck.gl se inyecta adentro respetando la curvatura */}
-        <DeckGLOverlay layers={capas} interleaved={true} />
+        <AnimatedPulseLayer conflicto={conflicto} />
       </Map>
     </main>
   );
