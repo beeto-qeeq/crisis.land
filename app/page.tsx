@@ -73,7 +73,7 @@ export default function Home() {
   return (
     <main className="h-screen w-full bg-slate-950 overflow-hidden relative font-sans text-white">
 
-      <div className="absolute top-5 left-5 z-10 pointer-events-none flex flex-col gap-4 max-h-[90vh] overflow-y-auto w-80">
+      <div className="absolute top-5 left-5 z-10 pointer-events-none flex flex-col gap-4 max-h-[90vh] overflow-y-auto w-80 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
         <h1 className="text-white text-3xl font-bold mb-2 ml-1" style={{ textShadow: '0 0 10px #38bdf8' }}>
           MONITOR DE CRISIS
         </h1>
