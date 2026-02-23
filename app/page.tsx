@@ -70,8 +70,8 @@ const AnimatedPulseLayer = memo(({ conflicto }: { conflicto: ConflictoVivo }) =>
     })
   ];
 
-  // Interleaved false para mayor compatibilidad con maplibre
-  return <DeckGLOverlay layers={capas} interleaved={false} />;
+  // Interleaved true para que respete la curvatura del globo
+  return <DeckGLOverlay layers={capas} interleaved={true} />;
 });
 AnimatedPulseLayer.displayName = 'AnimatedPulseLayer';
 
@@ -122,6 +122,8 @@ export default function Home() {
       <Map
         initialViewState={VISTA_INICIAL}
         mapStyle={ESTILO_MAPA_OSCURO}
+        // @ts-ignore
+        projection={{ type: 'globe' }}
         style={{ width: '100%', height: '100%' }}
       >
         <AnimatedPulseLayer conflicto={conflicto} />
