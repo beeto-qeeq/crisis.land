@@ -1,9 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, memo } from 'react';
-import Map, { useControl } from 'react-map-gl/maplibre';
-import { MapboxOverlay } from '@deck.gl/mapbox';
-import { ScatterplotLayer } from '@deck.gl/layers';
+import Map, { Marker } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
 export interface ConflictoVivo {
@@ -26,30 +24,7 @@ const VISTA_INICIAL = {
 
 const ESTILO_MAPA_OSCURO = "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json";
 
-function DeckGLOverlay(props: any) {
-  const overlay = useControl<MapboxOverlay>(() => new MapboxOverlay(props));
-  overlay.setProps(props);
-  return null;
-}
 
-const StaticMarkerLayer = memo(({ conflictos }: { conflictos: ConflictoVivo[] }) => {
-  const capas = [
-    new ScatterplotLayer<ConflictoVivo>({
-      id: 'capa-conflictos-estaticos',
-      data: conflictos,
-      pickable: true,
-      filled: true,
-      radiusUnits: 'pixels',
-      getRadius: 6,
-      getFillColor: [255, 0, 0, 255],
-      getPosition: (d) => [d.longitude, d.latitude],
-      updateTriggers: { getPosition: [conflictos] }
-    })
-  ];
-
-  return <DeckGLOverlay layers={capas} interleaved={true} />;
-});
-StaticMarkerLayer.displayName = 'StaticMarkerLayer';
 
 export default function Home() {
   const [conflictos, setConflictos] = useState<ConflictoVivo[]>([]);
@@ -124,7 +99,16 @@ export default function Home() {
         projection={{ type: 'globe' }}
         style={{ width: '100%', height: '100%' }}
       >
-        <StaticMarkerLayer conflictos={conflictos} />
+        {conflictos.map((conflicto) => (
+          <Marker
+            key={`marker-${conflicto.id}`}
+            longitude={conflicto.longitude}
+            latitude={conflicto.latitude}
+            anchor="center"
+          >
+            <div className="w-2.5 h-2.5 bg-red-600 rounded-full shadow-[0_0_4px_rgba(220,38,38,0.8)] border border-black/50"></div>
+          </Marker>
+        ))}
       </Map>
     </main>
   );
