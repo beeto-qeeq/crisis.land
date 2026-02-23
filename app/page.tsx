@@ -32,49 +32,24 @@ function DeckGLOverlay(props: any) {
   return null;
 }
 
-const AnimatedPulseLayer = memo(({ conflictos }: { conflictos: ConflictoVivo[] }) => {
-  const [fasePulso, setFasePulso] = useState(0);
-
-  useEffect(() => {
-    const intervaloAnimacion = setInterval(() => {
-      setFasePulso((faseActual) => (faseActual + 2) % 100);
-    }, 30);
-    return () => clearInterval(intervaloAnimacion);
-  }, []);
-
+const StaticMarkerLayer = memo(({ conflictos }: { conflictos: ConflictoVivo[] }) => {
   const capas = [
     new ScatterplotLayer<ConflictoVivo>({
-      id: 'capa-conflictos-pulso',
+      id: 'capa-conflictos-estaticos',
       data: conflictos,
       pickable: true,
-      stroked: true,
       filled: true,
-      lineWidthMinPixels: 2,
+      radiusUnits: 'pixels',
+      getRadius: 6,
+      getFillColor: [255, 0, 0, 255],
       getPosition: (d) => [d.longitude, d.latitude],
-      getRadius: (d) => 500 + (fasePulso * 30),
-      getFillColor: [255, 0, 0, 150 - (fasePulso * 1.5)],
-      getLineColor: [255, 0, 0, 255 - fasePulso],
-      updateTriggers: {
-        getRadius: [fasePulso],
-        getFillColor: [fasePulso],
-        getLineColor: [fasePulso],
-        getPosition: [conflictos]
-      }
-    }),
-    new ScatterplotLayer<ConflictoVivo>({
-      id: 'capa-conflictos-centro',
-      data: conflictos,
-      filled: true,
-      getPosition: (d) => [d.longitude, d.latitude],
-      getRadius: 200,
-      getFillColor: [255, 255, 255, 255],
       updateTriggers: { getPosition: [conflictos] }
     })
   ];
 
   return <DeckGLOverlay layers={capas} interleaved={true} />;
 });
-AnimatedPulseLayer.displayName = 'AnimatedPulseLayer';
+StaticMarkerLayer.displayName = 'StaticMarkerLayer';
 
 export default function Home() {
   const [conflictos, setConflictos] = useState<ConflictoVivo[]>([]);
@@ -149,7 +124,7 @@ export default function Home() {
         projection={{ type: 'globe' }}
         style={{ width: '100%', height: '100%' }}
       >
-        <AnimatedPulseLayer conflictos={conflictos} />
+        <StaticMarkerLayer conflictos={conflictos} />
       </Map>
     </main>
   );
