@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🚨 ALERTA — Narcobloqueos Jalisco • 22 Feb 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Bebas+Neue&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+  :root {
+    --red:#FF1F1F; --orange:#FF6B1A; --yellow:#FFD600; --green:#00E676;
+    --bg:#0A0A0A; --panel:#111111; --border:#2a2a2a; --text:#F0F0F0; --muted:#888;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font-family:'Barlow',sans-serif; height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+
+  /* HEADER */
+  header { background:var(--red); padding:10px 20px; display:flex; align-items:center; gap:14px; z-index:1000; flex-shrink:0; border-bottom:3px solid #000; }
+  .pulse-dot { width:14px;height:14px;background:#fff;border-radius:50%;animation:pulse 1s infinite;flex-shrink:0; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.7)} }
+  header h1 { font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:2px;color:#fff;line-height:1; }
+  header .sub { font-size:11px;color:rgba(255,255,255,.8);font-family:'Space Mono',monospace; }
+  .header-right { margin-left:auto;text-align:right; }
+  .live-badge { background:#fff;color:var(--red);font-family:'Space Mono',monospace;font-size:10px;font-weight:700;padding:3px 8px;border-radius:2px;letter-spacing:1px; }
+  #timestamp { font-size:10px;color:rgba(255,255,255,.7);font-family:'Space Mono',monospace;margin-top:3px; }
+
+  /* LAYOUT */
+  .main { display:flex; flex:1; overflow:hidden; position:relative; }
+
+  /* SIDEBAR */
+  .sidebar { width:320px;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0; }
+  .sidebar-header { padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between; }
+  .sidebar-header span { font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px; }
+  .count-badge { background:var(--red);color:#fff;font-family:'Bebas Neue',sans-serif;font-size:18px;padding:0 8px;border-radius:3px;letter-spacing:1px; }
+
+  /* TABS */
+  .tabs { display:flex;border-bottom:1px solid var(--border);flex-shrink:0; }
+  .tab { flex:1;padding:9px 0;font-size:11px;font-family:'Space Mono',monospace;text-align:center;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;transition:all .2s;text-transform:uppercase;letter-spacing:1px; }
+  .tab.active { color:var(--text);border-bottom-color:var(--red); }
+  .tab:hover { color:var(--text); }
+
+  /* FILTER BAR */
+  .filter-bar { display:flex;gap:6px;padding:8px 10px;border-bottom:1px solid var(--border);flex-wrap:wrap;flex-shrink:0;background:var(--bg); }
+  .filter-btn { font-family:'Space Mono',monospace;font-size:9px;color:var(--muted);background:#1a1a1a;border:1px solid var(--border);padding:4px 8px;border-radius:3px;cursor:pointer;transition:all .15s;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap; }
+  .filter-btn:hover { border-color:#555;color:var(--text); }
+  .filter-btn.active { background:rgba(255,31,31,.15);border-color:var(--red);color:var(--red); }
+
+  /* INCIDENTS LIST */
+  .incidents-list { overflow-y:auto;flex:1; }
+  .incidents-list::-webkit-scrollbar { width:4px; }
+  .incidents-list::-webkit-scrollbar-track { background:#0a0a0a; }
+  .incidents-list::-webkit-scrollbar-thumb { background:var(--border); }
+  .incident-item { padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s;border-left:3px solid transparent; }
+  .incident-item:hover { background:rgba(255,31,31,.08);border-left-color:var(--red); }
+  .incident-item.active { background:rgba(255,31,31,.12);border-left-color:var(--red); }
+  .incident-item.citizen { border-left-color:var(--orange); }
+  .incident-icon { font-size:16px;margin-right:6px; }
+  .incident-title { font-weight:600;font-size:13px;color:var(--text);margin-bottom:4px; }
+  .incident-place { font-size:11px;color:var(--muted);margin-bottom:2px; }
+  .incident-coords { font-family:'Space Mono',monospace;font-size:9px;color:#555; }
+  .incident-time { font-family:'Space Mono',monospace;font-size:10px;color:#aaa;margin-top:3px; }
+  .severity-pill { display:inline-block;font-size:9px;font-family:'Space Mono',monospace;padding:2px 6px;border-radius:2px;margin-top:4px;text-transform:uppercase;letter-spacing:.5px; }
+  .severity-high { background:rgba(255,31,31,.2);color:var(--red);border:1px solid rgba(255,31,31,.4); }
+  .severity-med  { background:rgba(255,107,26,.2);color:var(--orange);border:1px solid rgba(255,107,26,.4); }
+  .citizen-tag   { background:rgba(255,107,26,.15);color:var(--orange);border:1px solid rgba(255,107,26,.3); }
+
+  /* REPORT PANEL (desktop only) */
+  .report-panel { display:none;flex-direction:column;flex:1;overflow-y:auto;padding:16px;gap:12px; }
+  .report-panel.visible { display:flex; }
+  .report-panel h3 { font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1px;color:var(--red); }
+  .report-panel p { font-size:12px;color:var(--muted);line-height:1.5; }
+  .field-label { font-size:11px;font-family:'Space Mono',monospace;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px; }
+  .field-group { display:flex;flex-direction:column; }
+  input[type=text], select, textarea { background:#1a1a1a;border:1px solid var(--border);color:var(--text);font-family:'Barlow',sans-serif;font-size:13px;padding:8px 10px;border-radius:4px;outline:none;transition:border .2s; }
+  input[type=text]:focus, select:focus, textarea:focus { border-color:var(--red); }
+  textarea { resize:none;height:70px; }
+  select option { background:#1a1a1a; }
+  .map-pick-btn { background:#1a1a1a;border:1px dashed var(--border);color:var(--muted);font-size:12px;padding:10px;border-radius:4px;cursor:pointer;text-align:center;transition:all .2s;font-family:'Space Mono',monospace; }
+  .map-pick-btn:hover { border-color:var(--yellow);color:var(--yellow); }
+  .map-pick-btn.picked { border-color:var(--green);color:var(--green);border-style:solid; }
+  .submit-btn { background:var(--red);color:#fff;border:none;padding:12px;border-radius:4px;font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:2px;cursor:pointer;transition:opacity .2s; }
+  .submit-btn:hover { opacity:.85; }
+  .submit-btn:disabled { opacity:.4;cursor:not-allowed; }
+  .status-msg { font-size:12px;font-family:'Space Mono',monospace;text-align:center;padding:6px;border-radius:4px; }
+  .status-ok  { background:rgba(0,230,118,.1);color:var(--green);border:1px solid rgba(0,230,118,.3); }
+  .status-err { background:rgba(255,31,31,.1);color:var(--red);border:1px solid rgba(255,31,31,.3); }
+
+  /* MAP */
+  #map { flex:1;background:#1a1a1a; }
+
+  /* DESKTOP PICK OVERLAY */
+  #pick-overlay { display:none;position:absolute;top:0;left:320px;right:0;bottom:0;z-index:2000;cursor:crosshair;background:rgba(255,214,0,.04);border:3px solid var(--yellow); }
+  #pick-overlay.active { display:block; }
+  .pick-hint { position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.88);color:var(--yellow);font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:2px;padding:14px 24px;border-radius:4px;border:1px solid var(--yellow);text-align:center;pointer-events:none; }
+
+  /* ALERT BANNER */
+  .alert-banner { background:linear-gradient(90deg,#1a0000,#2a0505,#1a0000);border-top:1px solid var(--red);padding:8px 16px;font-size:11px;font-family:'Space Mono',monospace;color:var(--red);display:flex;gap:8px;align-items:center;flex-shrink:0;overflow:hidden;white-space:nowrap; }
+  .banner-text { animation:marquee 30s linear infinite;display:inline-block; }
+  @keyframes marquee { 0%{transform:translateX(100vw)} 100%{transform:translateX(-100%)} }
+
+  /* SIDEBAR FOOTER */
+  .made-by { padding:8px 16px;border-top:1px solid var(--border);display:flex;align-items:center;gap:6px;flex-shrink:0; }
+  .made-by span { font-family:'Space Mono',monospace;font-size:10px;color:#444; }
+  .made-by a { font-family:'Space Mono',monospace;font-size:10px;color:#888;text-decoration:none;transition:color .2s; }
+  .made-by a:hover { color:var(--text); }
+  .legend { padding:10px 16px;border-top:1px solid var(--border);flex-shrink:0; }
+  .legend-title { font-size:10px;color:var(--muted);font-family:'Space Mono',monospace;margin-bottom:6px;text-transform:uppercase;letter-spacing:1px; }
+  .legend-items { display:flex;gap:10px;flex-wrap:wrap; }
+  .legend-item { display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted); }
+  .legend-dot { width:10px;height:10px;border-radius:50%;flex-shrink:0; }
+
+  /* LEAFLET */
+  .custom-marker { background:transparent;border:none; }
+  .leaflet-popup-content-wrapper { background:#111 !important;border:1px solid var(--red) !important;border-radius:4px !important;box-shadow:0 0 20px rgba(255,31,31,.3) !important;color:#f0f0f0 !important;font-family:'Barlow',sans-serif !important; }
+  .leaflet-popup-tip { background:#111 !important; }
+  .leaflet-popup-close-button { color:#888 !important; }
+  .popup-content h3 { font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:1px;color:var(--red);margin-bottom:4px; }
+  .popup-content p { font-size:12px;color:#aaa;margin-bottom:4px;line-height:1.4; }
+  .tag { display:inline-block;background:rgba(255,31,31,.15);border:1px solid rgba(255,31,31,.3);color:var(--red);font-size:10px;padding:2px 6px;border-radius:2px;margin-top:4px;font-family:'Space Mono',monospace; }
+  .tag-coords { display:inline-block;background:rgba(255,214,0,.1);border:1px solid rgba(255,214,0,.4);color:var(--yellow);font-size:10px;padding:2px 6px;border-radius:2px;margin-top:4px;margin-left:4px;font-family:'Space Mono',monospace; }
+  .tag-citizen { background:rgba(255,107,26,.15);border:1px solid rgba(255,107,26,.3);color:var(--orange); }
+
+  /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+     MOBILE BOTTOM SHEET (report form)
+     Solo se muestra en móvil vía JS
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+  .bottom-sheet { display:none;position:fixed;inset:0;z-index:8000;flex-direction:column; }
+  .bottom-sheet.active { display:flex; }
+  .bs-backdrop { flex:1;background:rgba(0,0,0,.6); }
+  .bs-content {
+    background:var(--panel); border-top:3px solid var(--red);
+    border-radius:16px 16px 0 0;
+    padding:16px 20px 40px; display:flex; flex-direction:column; gap:14px;
+    max-height:90vh; overflow-y:auto;
+  }
+  .bs-handle-wrap { text-align:center; margin-bottom:2px; }
+  .bs-handle { width:36px;height:4px;background:var(--border);border-radius:2px;display:inline-block; }
+  .bs-title { font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px;color:var(--red); }
+  .bs-sub { font-size:12px;color:var(--muted);line-height:1.5; }
+
+  /* MAP PICKER MODAL (fullscreen, mobile) */
+  #map-picker-modal { display:none;position:fixed;inset:0;z-index:9999;flex-direction:column;background:#000; }
+  #map-picker-modal.active { display:flex; }
+  .modal-topbar { background:var(--yellow);color:#000;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0; }
+  .modal-topbar-title { font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:2px; }
+  .modal-cancel-btn { background:rgba(0,0,0,.15);border:none;color:#000;font-family:'Space Mono',monospace;font-size:11px;font-weight:700;padding:6px 14px;border-radius:3px;cursor:pointer; }
+  #map-picker-map { flex:1; }
+  .crosshair-wrap { position:absolute;top:50%;left:50%;transform:translate(-50%,-60%);pointer-events:none;z-index:1000; }
+  .modal-confirm-bar { background:var(--green);color:#000;border:none;padding:18px;font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:2px;cursor:pointer;flex-shrink:0; }
+
+  /* DISCLAIMER MODAL */
+  #disclaimer {
+    position:fixed; inset:0; z-index:99999;
+    background:rgba(0,0,0,.88); backdrop-filter:blur(3px);
+    display:flex; align-items:center; justify-content:center; padding:20px;
+  }
+  .disc-box {
+    background:var(--panel); border:2px solid var(--red);
+    border-radius:10px; max-width:400px; width:100%;
+    padding:28px 24px; display:flex; flex-direction:column; gap:14px;
+    box-shadow:0 0 50px rgba(255,31,31,.25);
+    animation:discIn .3s ease;
+  }
+  @keyframes discIn { from{transform:scale(.93);opacity:0} to{transform:scale(1);opacity:1} }
+  .disc-icon { font-size:38px; text-align:center; }
+  .disc-title { font-family:'Bebas Neue',sans-serif; font-size:28px; letter-spacing:2px; color:var(--red); text-align:center; line-height:1.1; }
+  .disc-body { font-size:13px; color:#ccc; line-height:1.75; text-align:center; }
+  .disc-body strong { color:var(--text); }
+  .disc-hr { border:none; border-top:1px solid var(--border); }
+  .disc-note { font-family:'Space Mono',monospace; font-size:10px; color:var(--muted); text-align:center; line-height:1.65; }
+  .disc-note a { color:#666; }
+  .disc-btn {
+    background:var(--red); color:#fff; border:none;
+    padding:14px; border-radius:4px; cursor:pointer;
+    font-family:'Bebas Neue',sans-serif; font-size:20px;
+    letter-spacing:2px; transition:opacity .2s; width:100%;
+  }
+  .disc-btn:hover { opacity:.85; }
+
+  /* MOBILE overrides */
+  @media(max-width:640px) {
+    .sidebar { width:100%; border-right:none; border-bottom:1px solid var(--border); max-height:50vh; }
+    .main { flex-direction:column; }
+    header h1 { font-size:15px; }
+    header .sub { display:none; }
+    #pick-overlay { left:0; top:50vh; }
+    .disc-box { padding:22px 18px; }
+    .disc-title { font-size:22px; }
+    .disc-body { font-size:12px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── DISCLAIMER ── -->
+<div id="disclaimer">
+  <div class="disc-box">
+    <div class="disc-icon">⚠️</div>
+    <div class="disc-title">Aviso importante</div>
+    <div class="disc-body">
+      Este mapa muestra <strong>reportes ciudadanos</strong> sobre los narcobloqueos en Jalisco del 22 de febrero de 2026.<br><br>
+      La información es recopilada en tiempo real y <strong>puede contener errores, imprecisiones o datos desactualizados</strong>. Algunos incidentes podrían haberse resuelto o la ubicación podría no ser exacta.<br><br>
+      Úsalo como referencia, <strong>no como fuente oficial</strong>.
+    </div>
+    <hr class="disc-hr"/>
+    <div class="disc-note">
+      Para información oficial sigue a las autoridades de Jalisco.<br>
+      Emergencias: <strong style="color:#fff">911</strong> &nbsp;•&nbsp; <a href="https://twitter.com/Pablo_Lemus" target="_blank" rel="noopener">@Pablo_Lemus</a>
+    </div>
+    <button class="disc-btn" onclick="document.getElementById('disclaimer').style.display='none'">
+      ENTENDIDO — VER EL MAPA
+    </button>
+  </div>
+</div>
+
+<header>
+  <div class="pulse-dot"></div>
+  <div>
+    <h1>🚨 ALERTA NARCOBLOQUEOS — JALISCO</h1>
+    <div class="sub">Código Rojo activo • 22 Febrero 2026</div>
+  </div>
+  <div class="header-right">
+    <div class="live-badge">⬤ EN VIVO</div>
+    <div id="timestamp"></div>
+  </div>
+</header>
+
+<div class="main">
+
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <span>Incidentes reportados</span>
+      <div class="count-badge" id="incident-count">—</div>
+    </div>
+
+    <div class="tabs">
+      <div class="tab active" id="tab-list" onclick="switchTab('list')">📋 Mapa</div>
+      <div class="tab" id="tab-report" onclick="switchTab('report')">📢 Reportar</div>
+    </div>
+
+    <!-- Lista (desktop + móvil) -->
+    <!-- Filter bar -->
+    <div class="filter-bar" id="filter-bar">
+      <button class="filter-btn" onclick="setFilter(10)"  id="f10">10 min</button>
+      <button class="filter-btn" onclick="setFilter(30)"  id="f30">30 min</button>
+      <button class="filter-btn" onclick="setFilter(60)"  id="f60">1 hora</button>
+      <button class="filter-btn" onclick="setFilter(120)" id="f120">2 horas</button>
+      <button class="filter-btn active" onclick="setFilter(240)" id="f240">4 horas</button>
+      <button class="filter-btn" onclick="setFilter(1440)" id="f1440">24 horas</button>
+      <button class="filter-btn" onclick="setFilter(0)"   id="f0">Todos</button>
+    </div>
+
+    <div class="incidents-list" id="incidents-list"></div>
+
+    <!-- Panel reporte DESKTOP (dentro del sidebar) -->
+    <div class="report-panel" id="report-panel">
+      <h3>📢 Reportar incidente</h3>
+      <p>Tu reporte se <strong>valida</strong> antes de aparecer. Solo reporta hechos reales.</p>
+      <div class="field-group">
+        <div class="field-label">Tipo de incidente</div>
+        <select id="r-type">
+          <option value="fire">🔥 Vehículo incendiado</option>
+          <option value="block">🚧 Bloqueo en vialidad</option>
+          <option value="spike">🛞 Poncha llantas</option>
+          <option value="shooting">💥 Balacera / enfrentamiento</option>
+          <option value="other">⚠️ Otro peligro</option>
+        </select>
+      </div>
+      <div class="field-group">
+        <div class="field-label">Descripción / dirección</div>
+        <textarea id="r-desc" placeholder="Ej: Periférico y Vallarta, vehículo en llamas..."></textarea>
+      </div>
+      <div class="field-group">
+        <div class="field-label">Evidencia <span style="color:var(--red)">*</span></div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">Foto del incidente <strong style="color:#ccc">o</strong> link de fuente (Twitter, noticia...)</div>
+        <label id="photo-label-d" style="background:#1a1a1a;border:1px dashed var(--border);color:var(--muted);font-size:11px;padding:9px;border-radius:4px;cursor:pointer;text-align:center;margin-bottom:6px;display:block;font-family:'Space Mono',monospace;" onclick="document.getElementById('photo-input-d').click()">
+          📷 Subir foto
+        </label>
+        <input type="file" id="photo-input-d" accept="image/*" style="display:none" onchange="onPhotoD(this)"/>
+        <input type="url" id="r-link-d" placeholder="🔗 O pega un link..." style="margin-top:0;" oninput="checkForm('r-desc','submit-btn')"/>
+      </div>
+      <div class="field-group">
+        <div class="field-label">Ubicación</div>
+        <div class="map-pick-btn" id="pick-btn" onclick="startPickingDesktop()">
+          📍 Toca aquí, luego haz click en el mapa
+        </div>
+      </div>
+      <button class="submit-btn" id="submit-btn" onclick="submitReport('r-type','r-desc','submit-btn','status-msg')" disabled>ENVIAR REPORTE</button>
+      <div id="status-msg" style="display:none"></div>
+    </div>
+
+    <div class="made-by">
+      <span>Hecho por <strong style="color:#ccc">Luis Romo</strong> &mdash;</span>
+      <a href="https://www.instagram.com/luisromo_666/" target="_blank" rel="noopener">📸 @luisromo_666</a>
+    </div>
+    <div class="legend">
+      <div class="legend-title">Leyenda</div>
+      <div class="legend-items">
+        <div class="legend-item"><div class="legend-dot" style="background:#FF1F1F"></div>Confirmado</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#FF6B1A"></div>Ciudadano</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#FFD600"></div>Bloqueo</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="map"></div>
+
+  <!-- Desktop pick overlay -->
+  <div id="pick-overlay" onclick="pickDesktop(event)">
+    <div class="pick-hint">📍 HAZ CLICK DONDE OCURRIÓ EL INCIDENTE<br><span style="font-size:14px;opacity:.7">Click en cualquier lugar del mapa</span></div>
+  </div>
+
+</div>
+
+<!-- BOTTOM SHEET — reporte móvil -->
+<div class="bottom-sheet" id="bottom-sheet">
+  <div class="bs-backdrop" onclick="closeSheet()"></div>
+  <div class="bs-content">
+    <div class="bs-handle-wrap"><div class="bs-handle"></div></div>
+    <div class="bs-title">📢 Reportar incidente</div>
+    <div class="bs-sub">Tu reporte se <strong>valida</strong> antes de aparecer en el mapa. Solo reporta hechos reales.</div>
+    <div class="field-group">
+      <div class="field-label">Tipo de incidente</div>
+      <select id="r-type-m" style="font-size:16px">
+        <option value="fire">🔥 Vehículo incendiado</option>
+        <option value="block">🚧 Bloqueo en vialidad</option>
+        <option value="spike">🛞 Poncha llantas</option>
+        <option value="shooting">💥 Balacera / enfrentamiento</option>
+        <option value="other">⚠️ Otro peligro</option>
+      </select>
+    </div>
+    <div class="field-group">
+      <div class="field-label">Descripción / dirección</div>
+      <textarea id="r-desc-m" style="font-size:16px;height:80px" placeholder="Ej: Periférico y Vallarta, vehículo en llamas..." oninput="checkForm('r-desc-m','submit-btn-m')"></textarea>
+    </div>
+    <div class="field-group">
+      <div class="field-label">Evidencia <span style="color:var(--red)">*</span></div>
+      <div class="bs-sub" style="margin-top:0;font-size:11px;">Sube una foto del incidente <strong style="color:#fff">o</strong> pega un link de una fuente (Twitter, noticia, etc.)</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px;">
+        <label id="photo-label-m" style="background:#1a1a1a;border:1px dashed var(--border);color:var(--muted);font-size:13px;padding:12px;border-radius:4px;cursor:pointer;text-align:center;transition:all .2s;font-family:'Space Mono',monospace;" onclick="document.getElementById('photo-input-m').click()">
+          📷 Toca para subir foto
+        </label>
+        <input type="file" id="photo-input-m" accept="image/*" capture="environment" style="display:none" onchange="onPhotoM(this)"/>
+        <input type="url" id="r-link-m" placeholder="🔗 O pega link (Twitter, noticia...)" style="font-size:16px;padding:10px;" oninput="checkForm('r-desc-m','submit-btn-m')"/>
+      </div>
+    </div>
+    <div class="field-group">
+      <div class="field-label">Ubicación en el mapa</div>
+      <div class="map-pick-btn" id="pick-btn-m" onclick="openPickerModal()" style="padding:14px;font-size:14px;">
+        📍 Toca aquí para marcar en el mapa
+      </div>
+    </div>
+    <button class="submit-btn" id="submit-btn-m" onclick="submitReport('r-type-m','r-desc-m','submit-btn-m','status-msg-m',true)" disabled style="font-size:20px;padding:16px;">ENVIAR REPORTE</button>
+    <div id="status-msg-m" style="display:none"></div>
+  </div>
+</div>
+
+<!-- MAP PICKER MODAL (pantalla completa, móvil) -->
+<div id="map-picker-modal">
+  <div class="modal-topbar">
+    <div class="modal-topbar-title">📍 NAVEGA Y MARCA EL PUNTO</div>
+    <button class="modal-cancel-btn" onclick="closePickerModal()">✕ Cancelar</button>
+  </div>
+  <div style="position:relative;flex:1;">
+    <div id="map-picker-map"></div>
+    <div class="crosshair-wrap">
+      <svg width="44" height="44" viewBox="0 0 44 44">
+        <line x1="22" y1="4" x2="22" y2="18" stroke="#FFD600" stroke-width="2.5" stroke-linecap="round"/>
+        <line x1="22" y1="26" x2="22" y2="40" stroke="#FFD600" stroke-width="2.5" stroke-linecap="round"/>
+        <line x1="4" y1="22" x2="18" y2="22" stroke="#FFD600" stroke-width="2.5" stroke-linecap="round"/>
+        <line x1="26" y1="22" x2="40" y2="22" stroke="#FFD600" stroke-width="2.5" stroke-linecap="round"/>
+        <circle cx="22" cy="22" r="5" fill="#FFD600" stroke="#000" stroke-width="1.5"/>
+      </svg>
+    </div>
+  </div>
+  <button class="modal-confirm-bar" onclick="confirmPick()">✅ CONFIRMAR ESTA UBICACIÓN</button>
+</div>
+
+<div class="alert-banner">
+  <span>⚠</span>
+  <span class="banner-text">CÓDIGO ROJO JALISCO — Evite circular en las zonas marcadas • Transporte público suspendido en ZMG • No salga si no es necesario • Emergencias: 911 • Reporta incidentes en tiempo real con el botón 📢 REPORTAR</span>
+</div>
+
+<!-- FIREBASE -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getDatabase, ref, push, onValue, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import { getStorage, ref as sref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
+
+const firebaseConfig = {
+  apiKey:"AIzaSyBaeMntnkwVigM9JQlqyvvqvh3p5NW3xqA",
+  authDomain:"narcos-app-422d4.firebaseapp.com",
+  databaseURL:"https://narcos-app-422d4-default-rtdb.firebaseio.com",
+  projectId:"narcos-app-422d4",
+  storageBucket:"narcos-app-422d4.firebasestorage.app",
+  messagingSenderId:"430752320780",
+  appId:"1:430752320780:web:145171a928d435e8ddcd29"
+};
+const app     = initializeApp(firebaseConfig);
+const db      = getDatabase(app);
+const storage = getStorage(app);
+
+window._firebasePush    = (data) => push(ref(db,'reports'), data);
+window._serverTimestamp = serverTimestamp;
+window._uploadPhoto = async (file) => {
+  const ext  = file.name.split('.').pop();
+  const path = `reports/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+  const snap = await uploadBytes(sref(storage, path), file);
+  return await getDownloadURL(snap.ref);
+};
+onValue(ref(db,'reports'), (snapshot) => {
+  const val = snapshot.val();
+  window._liveReports = val
+    ? Object.entries(val).map(([id,v])=>({id,...v})).filter(r=>r.status==='approved')
+    : [];
+  window._onReportsUpdate?.(window._liveReports);
+});
+</script>
+
+<!-- LEAFLET + APP -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// Timestamps reales: eventos ocurridos el 22 Feb 2026 entre ~14:00 y ~18:00 CST
+// Feb 22 2026 14:00 CST = 1740261600000 ms
+const INITIAL = [
+  {id:'i1', icon:'🔥',title:'Incendio vehículo — Crucero del Zapote',place:'Tlajomulco de Zúñiga',address:'Carretera Libre a Cd. Guzmán, Crucero del Zapote',lat:20.4319,lng:-103.4775,type:'fire',severity:'high',source:'Verificado',ts:1771790400000},
+  {id:'i2', icon:'🔥',title:'Incendio vehículo — Carretera a Zacoalco',place:'Tlajomulco de Zúñiga',address:'Carretera a Zacoalco',lat:20.3835,lng:-103.4312,type:'fire',severity:'high',source:'Reportado',ts:1771791000000},
+  {id:'i3', icon:'🔥',title:'Incendio vehículo — Col. Colonial Tlaquepaque',place:'San Pedro Tlaquepaque',address:'Colonia Colonial Tlaquepaque',lat:20.6404,lng:-103.3128,type:'fire',severity:'high',source:'Reportado',ts:1771791600000},
+  {id:'i4', icon:'🔥',title:'Incendio vehículo — Col. Tabachines',place:'Zapopan',address:'Colonia Tabachines / Periférico y Tabachines',lat:20.7412,lng:-103.3778,type:'fire',severity:'high',source:'Confirmado oficialmente',ts:1771792200000},
+  {id:'i5', icon:'🔥',title:'Incendio vehículo — Carretera Acatlán',place:'Acatlán de Juárez',address:'Sobre carretera a Acatlán (varios puntos)',lat:20.4333,lng:-103.5833,type:'fire',severity:'high',source:'Reportado',ts:1771792800000},
+  {id:'i6', icon:'🔥',title:'Incendio vehículo — Carr. Morelia–GDL',place:'La Barca',address:'Carretera Morelia – Guadalajara (tramo estatal)',lat:20.2800,lng:-102.5500,type:'fire',severity:'high',source:'Reportado',ts:1771793400000},
+  {id:'i7', icon:'🔥',title:'Incendio vehículo — Carr. Chapala / El Zapote',place:'Tlajomulco de Zúñiga',address:'Carretera a Chapala, altura del Zapote',lat:20.4830,lng:-103.3930,type:'fire',severity:'high',source:'Reportado',ts:1771794000000},
+  {id:'i8', icon:'🔥',title:'Incendio vehículo — Carr. GDL–Colima / Jocotepec',place:'Jocotepec',address:'Carretera Guadalajara–Colima, altura Jocotepec',lat:20.2854,lng:-103.4302,type:'fire',severity:'high',source:'Reportado',ts:1771794600000},
+  {id:'i9', icon:'🔥',title:'Incendio vehículo — Periférico y Calzada Indep.',place:'Guadalajara',address:'Periférico y Calzada Independencia',lat:20.7035,lng:-103.3234,type:'fire',severity:'high',source:'Confirmado oficialmente',ts:1771795200000},
+  {id:'i10',icon:'🔥',title:'Incendio vehículo — Periférico y Av. Alcalde',place:'Guadalajara',address:'Avenida Alcalde y Periférico',lat:20.7312,lng:-103.3478,type:'fire',severity:'high',source:'Confirmado oficialmente',ts:1771795800000},
+  {id:'i11',icon:'🔥',title:'Incendio vehículo — Calzada y Batallón S. Patricio',place:'Guadalajara',address:'Calzada Independencia y Batallón de San Patricio',lat:20.6598,lng:-103.3341,type:'fire',severity:'high',source:'Confirmado oficialmente',ts:1771796400000},
+  {id:'i12',icon:'🔥',title:'Incendio vehículo — Santa Cruz de las Flores',place:'Tlajomulco de Zúñiga',address:'Santa Cruz de las Flores, cruce Vicente Trigo',lat:20.4735,lng:-103.4127,type:'fire',severity:'high',source:'Reportado',ts:1771797000000},
+  {id:'i13',icon:'🔥',title:'Incendio vehículo — Carr. Chapala y Lázaro Cárd.',place:'Tlaquepaque',address:'Carr. a Chapala y Lázaro Cárdenas, Col. Revolución',lat:20.6301,lng:-103.3435,type:'fire',severity:'high',source:'Reportado',ts:1771797600000},
+  {id:'i14',icon:'🔥',title:'Incendio vehículo — GDL–Colima / Buenavista',place:'Tlajomulco de Zúñiga',address:'Carretera Guadalajara–Colima, altura Buenavista',lat:20.4142,lng:-103.4741,type:'fire',severity:'high',source:'Confirmado oficialmente',ts:1771798200000},
+  {id:'i15',icon:'🛞',title:'Poncha llantas — GDL–Chapala (varios puntos)',place:'El Salto',address:'Carretera Guadalajara–Chapala, tramo metropolitano',lat:20.5183,lng:-103.1817,type:'spike',severity:'med',source:'Reportado',ts:1771798800000},
+  {id:'i16',icon:'🔥',title:'Incendio vehículo — Periférico y Av. Vallarta',place:'Zapopan',address:'Periférico y Avenida Vallarta',lat:20.6766,lng:-103.4456,type:'fire',severity:'high',source:'Confirmado oficialmente',ts:1771799400000},
+  {id:'i17',icon:'🔥',title:'Incendio vehículo — Col. Lomas del Zalate',place:'Tonila',address:'Colimilla y Pedro Moreno, Col. Lomas del Zalate',lat:19.6000,lng:-103.4333,type:'fire',severity:'high',source:'Reportado',ts:1771800000000},
+  {id:'i18',icon:'🔥',title:'Incendio vehículo — 16 de Sep. y La Paz',place:'Guadalajara Centro',address:'Av. 16 de Septiembre y La Paz, vehículos bloqueando',lat:20.6690,lng:-103.3490,type:'fire',severity:'high',source:'Confirmado municipio GDL',ts:1771800600000},
+  {id:'i19',icon:'🏪',title:'Oxxo incendiado — Juárez y Calzada Indep.',place:'Guadalajara',address:'Juárez y Calzada Independencia',lat:20.6750,lng:-103.3450,type:'fire',severity:'high',source:'Confirmado municipio GDL',ts:1771801200000},
+  {id:'i20',icon:'🚌',title:'Macrobús incendiado — Periférico y Artesanos',place:'Guadalajara',address:'Periférico y Artesanos, estación del Macrobús',lat:20.7100,lng:-103.3550,type:'fire',severity:'high',source:'Confirmado municipio GDL',ts:1771801800000},
+  {id:'i21',icon:'🔥',title:'Bloqueo — Periférico y Ángel Martínez',place:'Guadalajara',address:'Periférico y Ángel Martínez',lat:20.7200,lng:-103.3600,type:'block',severity:'high',source:'Confirmado municipio GDL',ts:1771802400000},
+  {id:'i22',icon:'🔥',title:'Bloqueo — Periférico y Las Cañadas',place:'Zapopan',address:'Periférico y Las Cañadas',lat:20.7500,lng:-103.4200,type:'block',severity:'high',source:'Confirmado municipio Zapopan',ts:1771803000000},
+  {id:'i23',icon:'🔥',title:'Bloqueo — Adolf B Horn, Arvento',place:'Tlajomulco de Zúñiga',address:'Adolf B Horn en Arvento',lat:20.5300,lng:-103.4600,type:'block',severity:'high',source:'Confirmado municipio Tlajomulco',ts:1771803600000},
+  {id:'i24',icon:'🔥',title:'Bloqueo — López Mateos Sur / Las Plazas Outlet',place:'Tlajomulco de Zúñiga',address:'López Mateos Sur en Las Plazas Outlet',lat:20.5650,lng:-103.4150,type:'block',severity:'high',source:'Confirmado municipio Tlajomulco',ts:1771804200000},
+];
+
+const TYPE_COLOR = {fire:'#FF1F1F',block:'#FFD600',spike:'#FF6B1A',shooting:'#FF1F1F',other:'#FF6B1A'};
+const TYPE_ICON  = {fire:'🔥',block:'🚧',spike:'🛞',shooting:'💥',other:'⚠️'};
+
+function esc(s){ if(!s)return''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;'); }
+
+const isMobile = () => window.innerWidth <= 640;
+
+let map, activeId=null;
+const markerMap={};
+
+// ── INIT ────────────────────────────────────────────────
+window.addEventListener('load',()=>{
+  map = L.map('map',{center:[20.65,-103.35],zoom:11});
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{attribution:'&copy; OpenStreetMap &copy; CARTO',subdomains:'abcd',maxZoom:19}).addTo(map);
+  // INITIAL markers only shown when filter='Todos' — renderAll handles this
+  renderSidebar();
+  window._onReportsUpdate=(reports)=>{
+    renderAll();
+  };
+  if(window._liveReports) renderAll();
+  const tick=()=>{ document.getElementById('timestamp').textContent=new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit',second:'2-digit'})+' hrs'; };
+  tick(); setInterval(tick,1000);
+  setInterval(renderAll, 30000);
+});
+
+// ── MARCADORES ──────────────────────────────────────────
+function addMarker(inc,citizen){
+  const color=TYPE_COLOR[inc.type]||'#FF6B1A';
+  const emoji=inc.icon||TYPE_ICON[inc.type]||'⚠️';
+  const ring=citizen?`<circle cx="18" cy="18" r="16" fill="none" stroke="${color}" stroke-width="1.5" stroke-dasharray="4,2"/>`:'';
+  const svg=`<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg"><circle cx="18" cy="18" r="14" fill="${color}" opacity="0.25"/><circle cx="18" cy="18" r="9" fill="${color}" stroke="#000" stroke-width="1.5"/>${ring}<text x="18" y="23" text-anchor="middle" font-size="11">${emoji}</text></svg>`;
+  const timeStr=inc.ts?new Date(inc.ts).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'}):'';
+  const marker=L.marker([inc.lat,inc.lng],{icon:L.divIcon({className:'custom-marker',html:svg,iconSize:[36,36],iconAnchor:[18,18],popupAnchor:[0,-20]})}).addTo(map).bindPopup(`<div class="popup-content"><h3>${emoji} ${esc(inc.title)}</h3><p><strong style="color:#ddd">📍 ${esc(inc.place)}</strong></p><p>${esc(inc.address)}</p>${timeStr?`<p style="color:#555;font-size:10px;font-family:'Space Mono',monospace">🕐 ${timeStr}</p>`:''}<span class="tag ${citizen?'tag-citizen':''}">${esc(inc.source)}</span><span class="tag-coords">${(+inc.lat).toFixed(4)}, ${(+inc.lng).toFixed(4)}</span></div>`,{maxWidth:280});
+  marker.on('click',()=>setActive(inc.id));
+  markerMap[inc.id]=marker;
+}
+
+// ── SIDEBAR ─────────────────────────────────────────────
+function timeAgo(ts){
+  if(!ts) return null;
+  // Acepta número unix, string ISO, o cualquier formato que new Date() entienda
+  const ms = new Date(ts).getTime();
+  if(isNaN(ms)) return null;
+  const diff = Math.floor((Date.now() - ms) / 1000);
+  if(diff < 0)    return 'Ahora';
+  if(diff < 60)   return 'Hace ' + diff + ' seg';
+  if(diff < 3600) return 'Hace ' + Math.floor(diff/60) + ' min';
+  if(diff < 86400) return 'Hace ' + Math.floor(diff/3600) + ' h';
+  return 'Hace ' + Math.floor(diff/86400) + ' d';
+}
+
+function renderAll(){
+  const citizen=(window._liveReports||[]).map(r=>({
+    id:'r_'+r.id,icon:TYPE_ICON[r.type]||'⚠️',
+    title:r.desc?esc(r.desc.slice(0,50)):'Reporte ciudadano',
+    place:'Ciudadano',address:esc(r.desc)||'Sin descripción',
+    lat:r.lat,lng:r.lng,type:r.type||'other',
+    severity:'high',source:'👤 Reporte ciudadano',citizen:true,ts:r.ts
+  }));
+  const cutoff = activeFilter===0 ? 0 : Date.now() - activeFilter*60*1000;
+  const visibleCitizen = citizen.filter(inc => activeFilter===0 || !inc.ts || inc.ts >= cutoff);
+
+  // INITIAL solo aparece en "Todos"
+  const visibleInitial = activeFilter===0 ? INITIAL : [];
+
+  // Sync map markers
+  Object.keys(markerMap).filter(k=>k.startsWith('r_')).forEach(k=>{markerMap[k].remove();delete markerMap[k];});
+  // Remove/re-add INITIAL markers too
+  Object.keys(markerMap).filter(k=>k.startsWith('i')).forEach(k=>{markerMap[k].remove();delete markerMap[k];});
+  visibleInitial.forEach(inc=>addMarker(inc,false));
+  visibleCitizen.forEach(inc=>addMarker(inc,true));
+
+  renderSidebar();
+}
+window.renderAll = renderAll;
+
+let activeFilter = 240; // minutos, 0 = todos
+
+function setFilter(mins) {
+  activeFilter = mins;
+  // Update active button
+  [10,30,60,120,240,1440,0].forEach(m => {
+    const btn = document.getElementById('f'+m);
+    if(btn) btn.classList.toggle('active', m === mins);
+  });
+  renderAll();
+}
+window.setFilter = setFilter;
+
+function renderSidebar(){
+  const citizen=(window._liveReports||[]).map(r=>({id:'r_'+r.id,icon:TYPE_ICON[r.type]||'⚠️',title:r.desc?esc(r.desc.slice(0,50)):'Reporte ciudadano',place:'Ciudadano',lat:r.lat,lng:r.lng,type:r.type||'other',severity:'high',citizen:true,ts:r.ts}));
+  const cutoff = activeFilter === 0 ? 0 : Date.now() - activeFilter * 60 * 1000;
+  const visibleCitizen = citizen.filter(inc => activeFilter===0 || !inc.ts || inc.ts >= cutoff);
+  const visibleInitial = activeFilter===0 ? INITIAL : [];
+  const all=[...visibleInitial,...visibleCitizen]
+    .sort((a,b)=>(b.ts||0)-(a.ts||0));
+  document.getElementById('incident-count').textContent=all.length;
+  const list=document.getElementById('incidents-list');
+  list.innerHTML='';
+  all.forEach(inc=>{
+    const el=document.createElement('div');
+    el.className=`incident-item${inc.citizen?' citizen':''}${activeId===inc.id?' active':''}`;
+    const ago = inc.ts ? timeAgo(inc.ts) : null;
+    el.innerHTML=`<div class="incident-title"><span class="incident-icon">${inc.icon||TYPE_ICON[inc.type]||'⚠️'}</span>${esc(inc.title)}</div><div class="incident-place">📍 ${esc(inc.place)}</div><div class="incident-coords">${(+inc.lat).toFixed(4)}, ${(+inc.lng).toFixed(4)}</div>${ago ? `<div class="incident-time">🕐 ${ago}</div>` : ''}<span class="severity-pill ${inc.citizen?'citizen-tag':'severity-'+inc.severity}">${inc.citizen?'🟠 Ciudadano':inc.severity==='high'?'🔴 Alto riesgo':'🟠 Riesgo medio'}</span>`;
+    el.onclick=()=>setActive(inc.id);
+    list.appendChild(el);
+  });
+}
+
+function setActive(id){
+  activeId=id;
+  const all=[...INITIAL,...(window._liveReports||[]).map(r=>({id:'r_'+r.id,lat:r.lat,lng:r.lng}))];
+  const inc=all.find(i=>i.id===id);
+  if(inc&&map){map.setView([inc.lat,inc.lng],15,{animate:true});markerMap[id]?.openPopup();}
+  renderSidebar();
+}
+
+// ── TABS ────────────────────────────────────────────────
+// En móvil, el tab "Reportar" abre el bottom sheet
+// En desktop, muestra el panel dentro del sidebar
+function switchTab(tab){
+  if(tab==='report' && isMobile()){
+    openSheet(); return;
+  }
+  document.getElementById('tab-list').classList.toggle('active',tab==='list');
+  document.getElementById('tab-report').classList.toggle('active',tab==='report');
+  document.getElementById('incidents-list').style.display=tab==='list'?'block':'none';
+  document.getElementById('report-panel').classList.toggle('visible',tab==='report');
+}
+window.switchTab=switchTab;
+
+// ── BOTTOM SHEET (móvil) ────────────────────────────────
+function openSheet(){
+  document.getElementById('bottom-sheet').classList.add('active');
+  // Mantiene el tab "Mapa" activo visualmente en el sidebar
+  document.getElementById('tab-list').classList.add('active');
+  document.getElementById('tab-report').classList.remove('active');
+}
+function closeSheet(){
+  document.getElementById('bottom-sheet').classList.remove('active');
+}
+window.openSheet=openSheet;
+window.closeSheet=closeSheet;
+
+// ── MAP PICKER MODAL (móvil) ─────────────────────────────
+let pickerMap=null, pickerReady=false;
+let pickedLat=null, pickedLng=null, tempMarker=null;
+
+function openPickerModal(){
+  document.getElementById('map-picker-modal').classList.add('active');
+  document.getElementById('bottom-sheet').classList.remove('active');
+  setTimeout(()=>{
+    if(!pickerReady){
+      pickerMap=L.map('map-picker-map',{center:map?map.getCenter():[20.65,-103.35],zoom:map?map.getZoom():13});
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{attribution:'&copy; CARTO',subdomains:'abcd',maxZoom:19}).addTo(pickerMap);
+      pickerReady=true;
+    } else {
+      pickerMap.invalidateSize();
+      if(map) pickerMap.setView(map.getCenter(),map.getZoom());
+    }
+  },120);
+}
+function closePickerModal(){
+  document.getElementById('map-picker-modal').classList.remove('active');
+  document.getElementById('bottom-sheet').classList.add('active');
+}
+function confirmPick(){
+  if(!pickerMap)return;
+  const c=pickerMap.getCenter();
+  pickedLat=c.lat; pickedLng=c.lng;
+  const btn=document.getElementById('pick-btn-m');
+  btn.textContent=`✅ ${pickedLat.toFixed(4)}, ${pickedLng.toFixed(4)}`;
+  btn.classList.add('picked');
+  if(tempMarker)tempMarker.remove();
+  tempMarker=L.circleMarker([pickedLat,pickedLng],{radius:10,color:'#FFD600',fillColor:'#FFD600',fillOpacity:.5,weight:2}).addTo(map);
+  map.setView([pickedLat,pickedLng],15,{animate:true});
+  checkForm('r-desc-m','submit-btn-m');
+  closePickerModal();
+  document.getElementById('bottom-sheet').classList.add('active');
+}
+window.openPickerModal=openPickerModal;
+window.closePickerModal=closePickerModal;
+window.confirmPick=confirmPick;
+
+// ── DESKTOP PICK ─────────────────────────────────────────
+let isPicking=false;
+
+function startPickingDesktop(){
+  isPicking=true;
+  switchTab('list');
+  document.getElementById('pick-overlay').classList.add('active');
+}
+window.startPickingDesktop=startPickingDesktop;
+
+function pickDesktop(e){
+  if(!isPicking||!map)return;
+  const rect=document.getElementById('map').getBoundingClientRect();
+  const ll=map.containerPointToLatLng(L.point(e.clientX-rect.left,e.clientY-rect.top));
+  pickedLat=ll.lat; pickedLng=ll.lng;
+  isPicking=false;
+  document.getElementById('pick-overlay').classList.remove('active');
+  if(tempMarker)tempMarker.remove();
+  tempMarker=L.circleMarker([pickedLat,pickedLng],{radius:10,color:'#FFD600',fillColor:'#FFD600',fillOpacity:.5,weight:2}).addTo(map);
+  const btn=document.getElementById('pick-btn');
+  if(btn){btn.textContent=`✅ ${pickedLat.toFixed(4)}, ${pickedLng.toFixed(4)}`;btn.classList.add('picked');}
+  checkForm('r-desc','submit-btn');
+  switchTab('report');
+}
+window.pickDesktop=pickDesktop;
+
+// ── FORM CHECK ────────────────────────────────────────────
+function hasEvidence(mobile){
+  const linkId = mobile ? 'r-link-m' : 'r-link-d';
+  const photoId = mobile ? 'photo-input-m' : 'photo-input-d';
+  const link = document.getElementById(linkId)?.value.trim();
+  const photo = document.getElementById(photoId)?.files?.length > 0;
+  return !!(link || photo);
+}
+
+function checkForm(descId,btnId){
+  const desc=document.getElementById(descId)?.value.trim();
+  const btn=document.getElementById(btnId);
+  const mobile = btnId === 'submit-btn-m';
+  if(btn) btn.disabled=!(pickedLat && desc && desc.length>5 && hasEvidence(mobile));
+}
+window.checkForm=checkForm;
+
+// Photo handlers
+function onPhotoM(input){
+  const label = document.getElementById('photo-label-m');
+  if(input.files[0]){ label.textContent='✅ ' + input.files[0].name; label.style.borderColor='var(--green)'; label.style.color='var(--green)'; }
+  checkForm('r-desc-m','submit-btn-m');
+}
+function onPhotoD(input){
+  const label = document.getElementById('photo-label-d');
+  if(input.files[0]){ label.textContent='✅ ' + input.files[0].name; label.style.borderColor='var(--green)'; label.style.color='var(--green)'; }
+  checkForm('r-desc','submit-btn');
+}
+window.onPhotoM=onPhotoM;
+window.onPhotoD=onPhotoD;
+document.addEventListener('DOMContentLoaded',()=>{
+  document.getElementById('r-desc')?.addEventListener('input',()=>checkForm('r-desc','submit-btn'));
+});
+
+// ── SUBMIT ────────────────────────────────────────────────
+async function submitReport(typeId,descId,btnId,msgId,mobile=false){
+  const type=document.getElementById(typeId).value;
+  const desc=document.getElementById(descId).value.trim();
+  const btn=document.getElementById(btnId);
+  const msg=document.getElementById(msgId);
+  if(!pickedLat||!desc)return;
+  btn.disabled=true; btn.textContent='ENVIANDO…';
+  try{
+    if(!window._firebasePush)throw new Error('Firebase no inicializado');
+    const linkId     = mobile ? 'r-link-m' : 'r-link-d';
+    const photoInput = document.getElementById(mobile?'photo-input-m':'photo-input-d');
+    const evidenceLink = document.getElementById(linkId)?.value.trim()||null;
+    const photoFile  = photoInput?.files?.[0] || null;
+
+    // Upload photo if provided
+    let photoURL = null;
+    if(photoFile && window._uploadPhoto){
+      btn.textContent = 'SUBIENDO FOTO…';
+      try { photoURL = await window._uploadPhoto(photoFile); }
+      catch(e){ console.error('Error subiendo foto:', e); }
+    }
+
+    await window._firebasePush({
+      type, desc, lat:pickedLat, lng:pickedLng,
+      ts:Date.now(),
+      ts_server:window._serverTimestamp?window._serverTimestamp():null,
+      evidenceLink: evidenceLink||null,
+      photoURL: photoURL||null,
+    });
+    msg.className='status-msg status-ok';
+    msg.textContent='✅ Reporte enviado — se revisará antes de publicarse';
+    msg.style.display='block';
+    btn.textContent='ENVIADO ✅';
+    setTimeout(()=>{
+      document.getElementById(descId).value='';
+      document.getElementById(typeId).value='fire';
+      const pb=document.getElementById(mobile?'pick-btn-m':'pick-btn');
+      if(pb){pb.textContent=mobile?'📍 Toca aquí para marcar en el mapa':'📍 Toca aquí, luego haz click en el mapa';pb.classList.remove('picked');}
+      if(tempMarker){tempMarker.remove();tempMarker=null;}
+      pickedLat=null;pickedLng=null;
+      msg.style.display='none';
+      btn.textContent='ENVIAR REPORTE';
+      btn.disabled=true;
+      if(mobile)setTimeout(()=>closeSheet(),400);
+    },2500);
+  }catch(err){
+    msg.className='status-msg status-err';
+    msg.textContent='❌ Error al enviar. Verifica tu conexión.';
+    msg.style.display='block';
+    btn.disabled=false; btn.textContent='ENVIAR REPORTE';
+    console.error(err);
+  }
+}
+window.submitReport=submitReport;
+</script>
+</body>
+</html>
